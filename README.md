@@ -54,7 +54,7 @@
 - [x] 阶段 4：Streamable HTTP、会话与断线恢复
 - [x] 阶段 5：多 Server 注册、能力聚合与工具路由
 - [x] 阶段 6：凭据隔离、审批、限流和调用审计
-- [ ] 阶段 7：PostgreSQL、React 管理台与在线调试（实现完成，待数据库联调）
+- [x] 阶段 7：PostgreSQL、React 管理台与在线调试
 - [ ] 阶段 8：FastMCP 源码映射、兼容性与最终差异清单
 
 详细范围、交付物和验收标准见 [实施计划](./docs/IMPLEMENTATION_PLAN.md)。
@@ -139,10 +139,10 @@ uv run lob-mcp governance-demo
 启动 PostgreSQL 管理 API 与 React 控制台：
 
 ```bash
-uv run lob-mcp serve-admin --database-url postgresql://localhost/lob_mcp
+./start.sh
 ```
 
-首次启动自动执行 `migrations/001_initial.sql`。管理台提供 Server 配置概览、`order.query` 在线调用以及 Invocation 审计列表；Server 删除采用软删除，历史调用和事件不会级联丢失。前端开发模式可在 `web/` 下运行 `npm run dev`，生产构建由 FastAPI 直接托管。
+脚本读取根目录 `.env`；缺少前端产物时会自动安装依赖并构建，也可以通过 `./start.sh --port 8090` 修改端口。首次启动自动执行 `migrations/001_initial.sql`。管理台提供 Server 配置概览、`order.query` 在线调用以及 Invocation 审计列表；Server 删除采用软删除，历史调用和事件不会级联丢失。前端开发模式可在 `web/` 下运行 `npm run dev`，生产构建由 FastAPI 直接托管。
 
 ## 实施原则
 
