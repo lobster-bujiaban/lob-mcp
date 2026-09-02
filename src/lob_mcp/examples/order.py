@@ -17,6 +17,13 @@ class OrderQueryInput(BaseModel):
     )
 
 
+class OrderCancelInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    order_id: str = Field(min_length=1, max_length=64, description="要取消的订单号")
+    reason: str = Field(min_length=2, max_length=200, description="取消原因")
+
+
 ORDERS: dict[str, dict[str, Any]] = {
     "ORD-20250902-001": {
         "orderId": "ORD-20250902-001",
@@ -46,6 +53,21 @@ def query_order(params: OrderQueryInput) -> dict[str, Any]:
     return {"found": True, **order}
 
 
+def cancel_order(params: OrderCancelInput) -> dict[str, Any]:
+    order = ORDERS.get(params.order_id)
+    if order is None:
+        return {"orderId": params.order_id, "cancelled": False, "message": "未找到该订单"}
+    if order["status"] == "shipped":
+        return {"orderId": params.order_id, "cancelled": False, "message": "订单已发货，不能取消"}
+    order["status"] = "cancelled"
+    order["statusText"] = "已取消"
+    return {
+        "orderId": params.order_id,
+        "cancelled": True,
+        "reason": params.reason,
+    }
+
+
 def create_order_tool_registry() -> ToolRegistry:
     registry = ToolRegistry()
     registry.register(
@@ -54,5 +76,10 @@ def create_order_tool_registry() -> ToolRegistry:
         input_model=OrderQueryInput,
         handler=query_order,
     )
+    registry.register(
+        name="order.cancel",
+        description="取消尚未发货的订单（高风险写操作）",
+        input_model=OrderCancelInput,
+        handler=cancel_order,
+    )
     return registry
-

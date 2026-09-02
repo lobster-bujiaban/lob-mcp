@@ -6,7 +6,12 @@ readme = "README.md"
 requires-python = ">=3.12"
 license = { text = "Apache-2.0" }
 dependencies = [
+    "cryptography>=45,<47",
+    "psycopg[binary,pool]>=3.2,<4",
+    "fastapi>=0.116,<1",
+    "httpx>=0.28,<1",
     "pydantic>=2.11,<3",
+    "uvicorn>=0.35,<1",
 ]
 
 [project.scripts]
@@ -18,4 +23,3 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/lob_mcp"]
-

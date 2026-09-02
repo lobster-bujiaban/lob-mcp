@@ -50,11 +50,11 @@
 - [x] 阶段 0：协议模型、JSON-RPC 与离线最小闭环
 - [x] 阶段 1：stdio Client/Server 与生命周期
 - [x] 阶段 2：Tools、Schema 校验和订单查询演示
-- [ ] 阶段 3：Resources、Prompts 与订阅通知
-- [ ] 阶段 4：Streamable HTTP、会话与断线恢复
-- [ ] 阶段 5：多 Server 注册、能力聚合与工具路由
-- [ ] 阶段 6：凭据隔离、审批、限流和调用审计
-- [ ] 阶段 7：PostgreSQL、React 管理台与在线调试
+- [x] 阶段 3：Resources、Prompts 与订阅通知
+- [x] 阶段 4：Streamable HTTP、会话与断线恢复
+- [x] 阶段 5：多 Server 注册、能力聚合与工具路由
+- [x] 阶段 6：凭据隔离、审批、限流和调用审计
+- [ ] 阶段 7：PostgreSQL、React 管理台与在线调试（实现完成，待数据库联调）
 - [ ] 阶段 8：FastMCP 源码映射、兼容性与最终差异清单
 
 详细范围、交付物和验收标准见 [实施计划](./docs/IMPLEMENTATION_PLAN.md)。
@@ -70,6 +70,12 @@
 - OpenAI-compatible 模型接口用于 Agent 演示
 
 首阶段优先手写 JSON-RPC、生命周期和 stdio Transport，再引入 FastMCP 做兼容性对照，避免只会调用框架装饰器而不理解协议。
+
+## 调用流程图
+
+![LOB MCP 阶段 0～2 调用流程](./docs/mcp-call-flow.png)
+
+流程分为三段：Client 首先启动 Server 子进程并完成初始化；随后通过 `tools/list` 发现工具及参数 Schema；最后通过 `tools/call` 调用 `order.query`，由 Server 校验参数、执行订单查询并返回结构化结果。
 
 ## 快速开始
 
@@ -97,6 +103,46 @@ uv run lob-mcp tools-demo
 ```
 
 演示先通过 `tools/list` 动态发现 `order.query`，再通过 `tools/call` 查询固定订单 `ORD-20250902-001`。参数在工具执行前根据 Pydantic 生成的 JSON Schema 对应模型完成校验。
+
+读取资源并渲染 Prompt：
+
+```bash
+uv run lob-mcp content-demo
+```
+
+演示包含 `resources/list`、`resources/read`、`resources/templates/list`、`prompts/list` 和 `prompts/get`。Server 同时支持资源订阅，并可向已订阅 Client 发送 `notifications/resources/updated`。
+
+通过 Streamable HTTP 调用工具：
+
+```bash
+uv run lob-mcp http-demo
+```
+
+HTTP Transport 使用 `Mcp-Session-Id` 维持会话，校验 `MCP-Protocol-Version`、Origin 和 Bearer Token；POST 承载 JSON-RPC 请求，GET 长轮询接收 Server 通知，DELETE 主动关闭会话。Server 支持会话过期和重复请求幂等，Client 在会话失效后会自动重新初始化并重试调用。
+
+聚合多个 MCP Server 并路由工具：
+
+```bash
+uv run lob-mcp multi-server-demo
+```
+
+Gateway 并发连接多个 Server，以 `<server>::<tool>` 生成全局工具名。即使两个 Server 都提供 `order.query`，也会分别暴露为 `orders::order.query` 和 `backup::order.query`，不会静默覆盖；单个 Server 失败会记录健康状态，不阻断其他 Server。
+
+审批并审计高风险工具：
+
+```bash
+uv run lob-mcp governance-demo
+```
+
+治理层为工具声明只读、写入或高风险策略。高风险 `order.cancel` 首次调用只生成审批单，批准后才执行；审批人可以修订最终参数。凭据以加密引用保存在 Server 侧，审计记录自动脱敏，并记录风险等级、状态、耗时、Trace 和审批 ID。
+
+启动 PostgreSQL 管理 API 与 React 控制台：
+
+```bash
+uv run lob-mcp serve-admin --database-url postgresql://localhost/lob_mcp
+```
+
+首次启动自动执行 `migrations/001_initial.sql`。管理台提供 Server 配置概览、`order.query` 在线调用以及 Invocation 审计列表；Server 删除采用软删除，历史调用和事件不会级联丢失。前端开发模式可在 `web/` 下运行 `npm run dev`，生产构建由 FastAPI 直接托管。
 
 ## 实施原则
 

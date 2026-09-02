@@ -44,6 +44,7 @@ class MCPClient:
         self._event_sink = event_sink
         self._next_id = 1
         self._pending: dict[int | str, asyncio.Future[Any]] = {}
+        self._notifications: asyncio.Queue[JSONRPCNotification] = asyncio.Queue()
         self._reader_task: asyncio.Task[None] | None = None
         self._request_timeout = request_timeout
         self.state = ClientState.DISCONNECTED
@@ -92,6 +93,41 @@ class MCPClient:
         if not isinstance(result, dict) or not isinstance(result.get("content"), list):
             raise RuntimeError("tools/call returned an invalid result")
         return result
+
+    async def list_resources(self) -> list[dict[str, Any]]:
+        self._require_ready()
+        return self._list_result(await self.request("resources/list"), "resources")
+
+    async def read_resource(self, uri: str) -> list[dict[str, Any]]:
+        self._require_ready()
+        return self._list_result(
+            await self.request("resources/read", {"uri": uri}), "contents"
+        )
+
+    async def list_resource_templates(self) -> list[dict[str, Any]]:
+        self._require_ready()
+        return self._list_result(
+            await self.request("resources/templates/list"), "resourceTemplates"
+        )
+
+    async def subscribe_resource(self, uri: str) -> None:
+        self._require_ready()
+        await self.request("resources/subscribe", {"uri": uri})
+
+    async def list_prompts(self) -> list[dict[str, Any]]:
+        self._require_ready()
+        return self._list_result(await self.request("prompts/list"), "prompts")
+
+    async def get_prompt(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+        self._require_ready()
+        result = await self.request("prompts/get", {"name": name, "arguments": arguments})
+        if not isinstance(result, dict) or not isinstance(result.get("messages"), list):
+            raise RuntimeError("prompts/get returned an invalid result")
+        return result
+
+    async def next_notification(self, timeout: float = 10) -> JSONRPCNotification:
+        async with asyncio.timeout(timeout):
+            return await self._notifications.get()
 
     async def request(self, method: str, params: dict[str, Any] | None = None) -> Any:
         request_id = self._next_id
@@ -145,6 +181,9 @@ class MCPClient:
                     future = self._pending.get(message.id) if message.id is not None else None
                     if future is not None and not future.done():
                         future.set_exception(RemoteError(message))
+                elif isinstance(message, JSONRPCNotification):
+                    self._emit("receive", "notification", method=message.method)
+                    await self._notifications.put(message)
         except TransportClosed as exc:
             self._fail_pending(exc)
         except asyncio.CancelledError:
@@ -167,6 +206,11 @@ class MCPClient:
     def _require_ready(self) -> None:
         if self.state is not ClientState.READY:
             raise RuntimeError(f"client is not ready: {self.state}")
+
+    def _list_result(self, result: Any, key: str) -> list[dict[str, Any]]:
+        if not isinstance(result, dict) or not isinstance(result.get(key), list):
+            raise RuntimeError(f"response returned an invalid {key} result")
+        return result[key]
 
     def _emit(
         self,
