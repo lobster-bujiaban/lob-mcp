@@ -4,10 +4,12 @@ import asyncio
 import secrets
 import time
 from contextlib import suppress
+from collections import deque
 from dataclasses import dataclass, field
 from typing import Any
 
 from fastapi import FastAPI, Header, HTTPException, Request, Response
+from starlette.responses import StreamingResponse
 
 from lob_mcp.events import EventSink, discard_event
 from lob_mcp.examples.knowledge import create_prompt_registry, create_resource_registry
@@ -24,13 +26,21 @@ from lob_mcp.transport import TransportClosed, create_memory_transport_pair
 
 
 @dataclass(slots=True)
+class SSEEvent:
+    event_id: int
+    payload: bytes
+
+
+@dataclass(slots=True)
 class HTTPSession:
     session_id: str
     event_sink: EventSink
     client_transport: Any = field(init=False)
     server: MCPServer = field(init=False)
     responses: dict[int | str, asyncio.Future[bytes]] = field(default_factory=dict)
-    notifications: asyncio.Queue[bytes] = field(default_factory=asyncio.Queue)
+    notifications: asyncio.Queue[SSEEvent] = field(default_factory=asyncio.Queue)
+    event_history: deque[SSEEvent] = field(default_factory=lambda: deque(maxlen=100))
+    next_event_id: int = 1
     completed_responses: dict[int | str, tuple[bytes, bytes]] = field(default_factory=dict)
     last_activity: float = field(default_factory=time.monotonic)
     server_task: asyncio.Task[None] = field(init=False)
@@ -91,7 +101,10 @@ class HTTPSession:
                         if future is not None and not future.done():
                             future.set_result(payload)
                 elif isinstance(message, JSONRPCNotification):
-                    await self.notifications.put(payload)
+                    event = SSEEvent(self.next_event_id, payload)
+                    self.next_event_id += 1
+                    self.event_history.append(event)
+                    await self.notifications.put(event)
         except TransportClosed:
             return
 
@@ -120,7 +133,7 @@ def create_http_app(
     def authorize(authorization: str | None, origin: str | None) -> None:
         if authorization != f"Bearer {token}":
             raise HTTPException(status_code=401, detail="invalid bearer token")
-        if origin not in origins:
+        if origin is not None and origin not in origins:
             raise HTTPException(status_code=403, detail="origin is not allowed")
 
     @app.get("/health")
@@ -134,8 +147,11 @@ def create_http_app(
         origin: str | None = Header(default=None),
         mcp_session_id: str | None = Header(default=None),
         mcp_protocol_version: str | None = Header(default=None),
+        accept: str | None = Header(default=None),
     ) -> Response:
         authorize(authorization, origin)
+        if accept is None or "application/json" not in accept or "text/event-stream" not in accept:
+            raise HTTPException(status_code=406, detail="Accept must include application/json and text/event-stream")
         if mcp_protocol_version != "2025-06-18":
             raise HTTPException(status_code=400, detail="unsupported protocol version")
         payload = await request.body()
@@ -166,17 +182,34 @@ def create_http_app(
         authorization: str | None = Header(default=None),
         origin: str | None = Header(default=None),
         mcp_session_id: str | None = Header(default=None),
+        last_event_id: str | None = Header(default=None),
+        accept: str | None = Header(default=None),
     ) -> Response:
         authorize(authorization, origin)
+        if accept is None or "text/event-stream" not in accept:
+            raise HTTPException(status_code=406, detail="Accept must include text/event-stream")
         session = sessions.get(mcp_session_id or "")
         if session is None:
             raise HTTPException(status_code=404, detail="MCP session not found")
-        try:
-            async with asyncio.timeout(1):
-                payload = await session.notifications.get()
-        except TimeoutError:
-            return Response(status_code=204)
-        return Response(payload, media_type="application/json")
+
+        async def stream():
+            cursor = int(last_event_id) if last_event_id and last_event_id.isdigit() else 0
+            for event in session.event_history:
+                if event.event_id > cursor:
+                    yield _sse_bytes(event)
+            while True:
+                try:
+                    async with asyncio.timeout(15):
+                        event = await session.notifications.get()
+                    yield _sse_bytes(event)
+                except TimeoutError:
+                    yield b": keepalive\n\n"
+
+        return StreamingResponse(
+            stream(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
+        )
 
     @app.delete("/mcp")
     async def delete_session(
@@ -192,3 +225,7 @@ def create_http_app(
         return Response(status_code=204)
 
     return app
+
+
+def _sse_bytes(event: SSEEvent) -> bytes:
+    return b"id: " + str(event.event_id).encode() + b"\ndata: " + event.payload + b"\n\n"

@@ -11,6 +11,7 @@ from urllib.parse import urlparse
 from cryptography.fernet import Fernet
 
 from lob_mcp.gateway import MultiServerGateway
+from lob_mcp.persistence import MCPRepository
 
 
 class RiskLevel(StrEnum):
@@ -65,6 +66,25 @@ class CredentialStore:
 
     def resolve(self, reference: str) -> str:
         encrypted = self._encrypted.get(reference)
+        if encrypted is None:
+            raise KeyError("credential reference not found")
+        return self._cipher.decrypt(encrypted).decode()
+
+
+class PersistentCredentialStore:
+    """Encrypts credentials with a stable external master key and stores only ciphertext."""
+
+    def __init__(self, repository: MCPRepository, key: str | bytes) -> None:
+        self._repository = repository
+        self._cipher = Fernet(key.encode() if isinstance(key, str) else key)
+
+    async def put(self, secret: str) -> str:
+        reference = f"cred_{uuid.uuid4().hex}"
+        await self._repository.put_credential(reference, self._cipher.encrypt(secret.encode()))
+        return reference
+
+    async def resolve(self, reference: str) -> str:
+        encrypted = await self._repository.get_credential(reference)
         if encrypted is None:
             raise KeyError("credential reference not found")
         return self._cipher.decrypt(encrypted).decode()

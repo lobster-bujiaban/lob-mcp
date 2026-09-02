@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "lob-mcp": {
+      "type": "stdio",
+      "command": ".venv/bin/python",
+      "args": ["-m", "lob_mcp.cli", "serve-stdio"]
+    }
+  }
+}

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -22,6 +23,11 @@ class OrderCancelInput(BaseModel):
 
     order_id: str = Field(min_length=1, max_length=64, description="要取消的订单号")
     reason: str = Field(min_length=2, max_length=200, description="取消原因")
+
+
+class WaitInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    seconds: float = Field(ge=0.1, le=30, description="等待秒数，用于验证超时和取消")
 
 
 ORDERS: dict[str, dict[str, Any]] = {
@@ -68,6 +74,11 @@ def cancel_order(params: OrderCancelInput) -> dict[str, Any]:
     }
 
 
+async def wait_for_cancellation(params: WaitInput) -> dict[str, Any]:
+    await asyncio.sleep(params.seconds)
+    return {"waitedSeconds": params.seconds}
+
+
 def create_order_tool_registry() -> ToolRegistry:
     registry = ToolRegistry()
     registry.register(
@@ -81,5 +92,11 @@ def create_order_tool_registry() -> ToolRegistry:
         description="取消尚未发货的订单（高风险写操作）",
         input_model=OrderCancelInput,
         handler=cancel_order,
+    )
+    registry.register(
+        name="demo.wait",
+        description="等待指定秒数，用于验证超时与协作式取消",
+        input_model=WaitInput,
+        handler=wait_for_cancellation,
     )
     return registry

@@ -9,6 +9,12 @@ from pydantic import BaseModel, ValidationError
 ToolHandler = Any
 
 
+class ToolProtocolError(Exception):
+    def __init__(self, message: str, data: Any = None) -> None:
+        self.data = data
+        super().__init__(message)
+
+
 @dataclass(frozen=True, slots=True)
 class ToolDefinition:
     name: str
@@ -46,13 +52,13 @@ class ToolRegistry:
     async def call(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         tool = self._tools.get(name)
         if tool is None:
-            return self._error_result(f"unknown tool: {name}")
+            raise ToolProtocolError(f"Unknown tool: {name}")
 
         try:
             validated = tool.input_model.model_validate(arguments)
         except ValidationError as exc:
-            return self._error_result(
-                "invalid tool arguments",
+            raise ToolProtocolError(
+                "Invalid tool arguments",
                 {"validationErrors": exc.errors(include_url=False)},
             )
 

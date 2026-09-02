@@ -17,7 +17,7 @@ from lob_mcp.protocol import (
 from lob_mcp.prompts import PromptRegistry
 from lob_mcp.resources import ResourceRegistry
 from lob_mcp.transport import Transport, TransportClosed
-from lob_mcp.tools import ToolRegistry
+from lob_mcp.tools import ToolProtocolError, ToolRegistry
 
 MethodHandler = Callable[[dict[str, Any] | list[Any] | None], Awaitable[Any]]
 
@@ -84,6 +84,12 @@ class MCPServer:
             return
         try:
             result = await handler(request.params)
+        except ToolProtocolError as exc:
+            await self._send_error(request.id, -32602, str(exc), exc.data)
+            return
+        except ValueError as exc:
+            await self._send_error(request.id, -32602, "Invalid params", str(exc))
+            return
         except Exception as exc:
             await self._send_error(request.id, -32603, "Internal error", str(exc))
             return
@@ -98,8 +104,14 @@ class MCPServer:
     async def _initialize(self, params: dict[str, Any] | list[Any] | None) -> dict[str, Any]:
         if not isinstance(params, dict):
             raise ValueError("initialize params must be an object")
+        requested_version = params.get("protocolVersion")
+        protocol_version = (
+            requested_version
+            if requested_version in {"2025-06-18", "2025-03-26"}
+            else "2025-06-18"
+        )
         return {
-            "protocolVersion": params.get("protocolVersion", "2025-06-18"),
+            "protocolVersion": protocol_version,
             "capabilities": {
                 "tools": {"listChanged": True},
                 "resources": {"subscribe": True, "listChanged": True},

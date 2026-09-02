@@ -55,7 +55,7 @@
 - [x] 阶段 5：多 Server 注册、能力聚合与工具路由
 - [x] 阶段 6：凭据隔离、审批、限流和调用审计
 - [x] 阶段 7：PostgreSQL、React 管理台与在线调试
-- [ ] 阶段 8：FastMCP 源码映射、兼容性与最终差异清单
+- [x] 阶段 8：FastMCP 源码映射、兼容性与最终差异清单
 
 详细范围、交付物和验收标准见 [实施计划](./docs/IMPLEMENTATION_PLAN.md)。
 
@@ -142,7 +142,15 @@ uv run lob-mcp governance-demo
 ./start.sh
 ```
 
-脚本读取根目录 `.env`；缺少前端产物时会自动安装依赖并构建，也可以通过 `./start.sh --port 8090` 修改端口。首次启动自动执行 `migrations/001_initial.sql`。管理台提供 Server 配置概览、`order.query` 在线调用以及 Invocation 审计列表；Server 删除采用软删除，历史调用和事件不会级联丢失。前端开发模式可在 `web/` 下运行 `npm run dev`，生产构建由 FastAPI 直接托管。
+脚本读取根目录 `.env`，首次运行会生成持久化凭据主密钥；缺少前端产物时会自动安装依赖并构建，也可以通过 `./start.sh --port 8090` 修改端口。启动时自动执行增量 Migration。管理台提供 Server CRUD 与动态连接、能力快照、在线调用、持久化审批、审计筛选与详情时间线、运行中取消；Server 删除采用软删除，历史调用和事件不会级联丢失。前端开发模式可在 `web/` 下运行 `npm run dev`，生产构建由 FastAPI 直接托管。
+
+## 源码映射与兼容性
+
+- [FastMCP 4.0.1 源码映射](./docs/FASTMCP_SOURCE_MAP.md)
+- [MCP 兼容性与故障验证报告](./docs/COMPATIBILITY_REPORT.md)
+- [生产化风险与后续边界](./docs/PRODUCTION_RISKS.md)
+
+官方 Inspector 已验证 stdio 初始化、Tools、工具调用、Resources 和 Prompts。可通过仓库中的 `inspector.mcp.json` 重复执行兼容检查。
 
 ## 实施原则
 

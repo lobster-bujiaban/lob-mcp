@@ -313,7 +313,10 @@ def serve_http(port: int, session_ttl: float) -> None:
 
 
 def serve_admin(port: int, database_url: str) -> None:
-    app = create_management_app(database_url)
+    master_key = os.getenv("LOB_MCP_MASTER_KEY")
+    if not master_key:
+        raise RuntimeError("LOB_MCP_MASTER_KEY is required; use ./start.sh to generate it")
+    app = create_management_app(database_url, master_key=master_key)
     uvicorn.run(app, host="127.0.0.1", port=port, log_level="info")
 
 

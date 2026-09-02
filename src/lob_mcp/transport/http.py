@@ -32,6 +32,7 @@ class StreamableHTTPTransport:
         self._reconnect_count = 0
         self._reconnect_lock = asyncio.Lock()
         self._closed = False
+        self._last_event_id: str | None = None
 
     @property
     def session_id(self) -> str | None:
@@ -83,17 +84,29 @@ class StreamableHTTPTransport:
     async def _poll_notifications(self) -> None:
         try:
             while not self._closed:
-                response = await self._client.get(
-                    self._endpoint, headers=self._headers(), timeout=15
-                )
-                if response.status_code == 200 and response.content:
-                    message = decode_message(response.content)
-                    if isinstance(message, JSONRPCNotification):
-                        await self._incoming.put(response.content)
-                elif response.status_code not in (204, 404):
-                    raise TransportClosed(
-                        f"notification stream failed: {response.status_code}"
-                    )
+                headers = self._headers(accept="text/event-stream")
+                if self._last_event_id is not None:
+                    headers["last-event-id"] = self._last_event_id
+                async with self._client.stream(
+                    "GET", self._endpoint, headers=headers, timeout=None
+                ) as response:
+                    if response.status_code == 404:
+                        return
+                    if response.status_code != 200:
+                        raise TransportClosed(
+                            f"notification stream failed: {response.status_code}"
+                        )
+                    event_id: str | None = None
+                    async for line in response.aiter_lines():
+                        if line.startswith("id:"):
+                            event_id = line[3:].strip()
+                        elif line.startswith("data:"):
+                            payload = line[5:].strip().encode()
+                            message = decode_message(payload)
+                            if isinstance(message, JSONRPCNotification):
+                                if event_id is not None:
+                                    self._last_event_id = event_id
+                                await self._incoming.put(payload)
         except asyncio.CancelledError:
             raise
         except (httpx.HTTPError, TransportClosed):
@@ -135,12 +148,13 @@ class StreamableHTTPTransport:
             self._poll_task = asyncio.create_task(self._poll_notifications())
             self._reconnect_count += 1
 
-    def _headers(self) -> dict[str, str]:
+    def _headers(self, *, accept: str = "application/json, text/event-stream") -> dict[str, str]:
         headers = {
             "authorization": f"Bearer {self._token}",
             "origin": self._origin,
             "mcp-protocol-version": self._protocol_version,
             "content-type": "application/json",
+            "accept": accept,
         }
         if self._session_id is not None:
             headers["mcp-session-id"] = self._session_id
