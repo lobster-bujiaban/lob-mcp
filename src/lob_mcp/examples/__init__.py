@@ -1,0 +1,2 @@
+"""Built-in MCP examples."""
+

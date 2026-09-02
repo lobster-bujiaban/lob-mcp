@@ -47,9 +47,9 @@
 
 ## 阶段路线
 
-- [ ] 阶段 0：协议模型、JSON-RPC 与离线最小闭环
-- [ ] 阶段 1：stdio Client/Server 与生命周期
-- [ ] 阶段 2：Tools、Schema 校验和订单查询演示
+- [x] 阶段 0：协议模型、JSON-RPC 与离线最小闭环
+- [x] 阶段 1：stdio Client/Server 与生命周期
+- [x] 阶段 2：Tools、Schema 校验和订单查询演示
 - [ ] 阶段 3：Resources、Prompts 与订阅通知
 - [ ] 阶段 4：Streamable HTTP、会话与断线恢复
 - [ ] 阶段 5：多 Server 注册、能力聚合与工具路由
@@ -70,6 +70,33 @@
 - OpenAI-compatible 模型接口用于 Agent 演示
 
 首阶段优先手写 JSON-RPC、生命周期和 stdio Transport，再引入 FastMCP 做兼容性对照，避免只会调用框架装饰器而不理解协议。
+
+## 快速开始
+
+安装依赖并运行离线最小闭环：
+
+```bash
+uv sync
+uv run lob-mcp demo
+```
+
+演示通过内存双向 Transport 完成 `initialize → initialized → ping`，并逐行输出结构化协议事件，不需要模型、数据库或网络服务。
+
+启动独立 Server 子进程并通过 stdin/stdout 完成相同协议流程：
+
+```bash
+uv run lob-mcp stdio-demo
+```
+
+stdio 的 stdout 只传输 JSON-RPC 消息，Server 事件写入 stderr，由 Client 独立读取，避免业务日志污染协议数据。
+
+发现并调用订单查询工具：
+
+```bash
+uv run lob-mcp tools-demo
+```
+
+演示先通过 `tools/list` 动态发现 `order.query`，再通过 `tools/call` 查询固定订单 `ORD-20250902-001`。参数在工具执行前根据 Pydantic 生成的 JSON Schema 对应模型完成校验。
 
 ## 实施原则
 
