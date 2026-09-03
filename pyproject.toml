@@ -27,4 +27,5 @@ packages = ["src/lob_mcp"]
 [dependency-groups]
 dev = [
     "fastmcp>=4.0.1",
+    "pillow>=12.3.0",
 ]
