@@ -1,2 +1,0 @@
-edge-tts:zh-CN-XiaoyiNeural:+22%
-回到开场，模型不是突然学会了公司的数据库。它只是通过统一规则完成四件事。先连接 Server，再发现能力，然后按规则调用，最后接受审批、取消和审计。Function Calling 让模型说出自己想做什么；MCP 让外部系统说明自己能做什么，以及怎样安全地做。完整源码、流程图和兼容报告都在 lobster bujiaban 的 lob mcp。
