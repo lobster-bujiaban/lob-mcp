@@ -1,0 +1,2 @@
+edge-tts:zh-CN-XiaoyiNeural:+22%
+Client 找到 Server 后，先不能办业务，要像两个人通话前先确认彼此听得懂。Client 先发起初始化，Server 回答自己支持的版本和能力，Client 再确认收到。完成这三步，连接才进入就绪状态。这样版本不兼容或连接超时，会在业务调用之前被发现。
