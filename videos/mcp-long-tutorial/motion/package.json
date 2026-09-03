@@ -1,0 +1,1 @@
+{"name":"lob-mcp-motion-video","private":true,"type":"module","scripts":{"check":"npx --yes hyperframes@0.7.108 check","render":"npx --yes hyperframes@0.7.108 render --output ../lob-mcp-motion.raw.mp4"}}
