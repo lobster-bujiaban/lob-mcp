@@ -1,0 +1,4 @@
+-- 在 postgres 数据库中使用管理员账号执行。
+-- 把 REPLACE_WITH_ENV_PASSWORD 替换为 .env 中当前的 POSTGRES_PASSWORD。
+
+ALTER ROLE lob_mcp PASSWORD 'REPLACE_WITH_ENV_PASSWORD';
